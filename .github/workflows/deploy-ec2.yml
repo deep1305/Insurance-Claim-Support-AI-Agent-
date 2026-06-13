@@ -139,7 +139,7 @@ jobs:
             echo "Docker not found. Installing Docker..."
             if command -v apt-get >/dev/null 2>&1; then
               sudo apt-get update
-              sudo apt-get install -y docker.io docker-compose-plugin
+              sudo apt-get install -y docker.io curl ca-certificates
             else
               echo "ERROR: Unsupported package manager; install Docker manually."
               exit 1
@@ -153,8 +153,30 @@ jobs:
           elif command -v docker-compose >/dev/null 2>&1; then
             DOCKER_COMPOSE_CMD="sudo docker-compose"
           else
-            echo "ERROR: Docker Compose is not available."
-            exit 1
+            echo "Docker Compose plugin not found. Installing standalone plugin..."
+            COMPOSE_VERSION="v2.40.3"
+            ARCH="$(uname -m)"
+            case "$ARCH" in
+              x86_64|amd64) COMPOSE_ARCH="x86_64" ;;
+              aarch64|arm64) COMPOSE_ARCH="aarch64" ;;
+              *)
+                echo "ERROR: Unsupported architecture for Docker Compose: $ARCH"
+                exit 1
+                ;;
+            esac
+
+            sudo mkdir -p /usr/local/lib/docker/cli-plugins
+            sudo curl -fsSL \
+              "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-${COMPOSE_ARCH}" \
+              -o /usr/local/lib/docker/cli-plugins/docker-compose
+            sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+            if sudo docker compose version >/dev/null 2>&1; then
+              DOCKER_COMPOSE_CMD="sudo docker compose"
+            else
+              echo "ERROR: Docker Compose is not available after plugin install."
+              exit 1
+            fi
           fi
 
           echo "Reclaiming disk space before build..."
